@@ -1,0 +1,693 @@
+---
+title: "UPI CASE STUDY"
+format: html
+editor: visual
+---
+
+# UPI TRANSACTIONS CASE STUDY
+
+```{r}
+# Install packages if required
+library(tidyverse)
+library(forecast)
+library(tseries)
+library(lubridate)
+library(scales)
+library(strucchange)
+```
+
+## Loading the Data Set
+
+```{r}
+# Load data
+upi <- read.csv("C:\\Users\\Sachin\\OneDrive\\Desktop\\LIFE STORE\\MANIPAL PROGRESS\\SEM-3\\TSA\\UPI_Transactions_Case_study.csv")
+
+# Convert Date
+upi$Date <- as.Date(upi$Date)
+
+# Check structure
+str(upi)
+
+# Check dimensions
+dim(upi)
+
+# Check missing values
+colSums(is.na(upi))
+
+# Summary
+summary(upi)
+```
+
+## CREATING TIME SERIES
+
+```{r}
+volume_ts <- ts(
+  upi$Transaction_Volume_Billion,
+  start = c(2018, 1),
+  frequency = 12
+)
+
+value_ts <- ts(
+  upi$Transaction_Value_INR_Trillion,
+  start = c(2018, 1),
+  frequency = 12
+)
+```
+
+## BASIC VISUALIZATION
+
+```{r}
+autoplot(volume_ts) +
+  labs(
+    title = "Monthly UPI Transaction Volume",
+    x = "Year",
+    y = "Transactions (Billion)"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+autoplot(value_ts) + labs( title = "Monthly UPI Transaction Value", x = "Year", y = "Transaction Value (₹ Trillion)" ) + theme_minimal()
+```
+
+## GROWTH ANALYTICS
+
+```{r}
+upi <- upi %>%
+  mutate(
+    Volume_MoM_Growth =
+      (Transaction_Volume_Billion /
+         lag(Transaction_Volume_Billion) - 1) * 100,
+    
+    Value_MoM_Growth =
+      (Transaction_Value_INR_Trillion /
+         lag(Transaction_Value_INR_Trillion) - 1) * 100,
+    
+    Volume_YoY_Growth =
+      (Transaction_Volume_Billion /
+         lag(Transaction_Volume_Billion, 12) - 1) * 100,
+    
+    Value_YoY_Growth =
+      (Transaction_Value_INR_Trillion /
+         lag(Transaction_Value_INR_Trillion, 12) - 1) * 100
+  )
+```
+
+### GROWTH ANALYTICS PLOT
+
+```{r}
+ggplot(upi, aes(Date, Volume_YoY_Growth)) +
+  geom_line() +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  labs(
+    title = "Year-on-Year Growth in UPI Transaction Volume",
+    x = "Date",
+    y = "YoY Growth (%)"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+ggplot(upi, aes(Date, Value_YoY_Growth)) +
+  geom_line() +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  labs(
+    title = "Year-on-Year Growth in UPI Transaction Value",
+    x = "Date",
+    y = "YoY Growth (%)"
+  ) +
+  theme_minimal()
+```
+
+## TESTING LINEAR VS EXPONENTIONAL TREND
+
+### LINEAR TREND
+
+```{r}
+linear_volume <- tslm(volume_ts ~ trend)
+summary(linear_volume)
+
+linear_value <- tslm(value_ts ~ trend)
+summary(linear_value)
+```
+
+### LOG LINEAR MODEL
+
+```{r}
+log_volume <- tslm(log(volume_ts) ~ trend)
+summary(log_volume)
+
+log_value <- tslm(log(value_ts) ~ trend)
+summary(log_value)
+```
+
+```{r}
+AIC(linear_volume)
+AIC(log_volume)
+
+AIC(linear_value)
+AIC(log_value)
+```
+
+## AVERAGE TRANSACTION SIZE
+
+```{r}
+upi <- upi %>%
+  mutate(
+    Average_Transaction_Size =
+      (Transaction_Value_INR_Trillion /
+         Transaction_Volume_Billion) * 1000
+  )
+```
+
+```{r}
+ggplot(upi, aes(Date, Average_Transaction_Size)) +
+  geom_line() +
+  labs(
+    title = "Average UPI Transaction Size",
+    x = "Date",
+    y = "Average Transaction Size (₹)"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+upi %>%
+  slice_max(Average_Transaction_Size, n = 1)
+```
+
+## AVERAGE TRANSACTION SIZE
+
+```{r}
+tail(
+  upi[, c("Date", "Average_Transaction_Size")],
+  12
+)
+```
+
+## VOLUME VS VALUE RELATIONSHIP
+
+```{r}
+cor(
+  upi$Transaction_Volume_Billion,
+  upi$Transaction_Value_INR_Trillion
+)
+```
+
+```{r}
+cor(
+  upi$Transaction_Volume_Billion,
+  upi$Transaction_Value_INR_Trillion
+)
+```
+
+```{r}
+cor(
+  upi$Volume_MoM_Growth,
+  upi$Value_MoM_Growth,
+  use = "complete.obs"
+)
+```
+
+## VISUALISATION
+
+```{r}
+ggplot(
+  upi,
+  aes(
+    x = Transaction_Volume_Billion,
+    y = Transaction_Value_INR_Trillion
+  )
+) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(
+    title = "UPI Transaction Volume vs Transaction Value",
+    x = "Transaction Volume (Billion)",
+    y = "Transaction Value (₹ Trillion)"
+  ) +
+  theme_minimal()
+```
+
+## INVESTIGATING SEASONALITY
+
+```{r}
+ggseasonplot(
+  volume_ts,
+  year.labels = TRUE
+) +
+  labs(
+    title = "Seasonal Pattern - Transaction Volume",
+    y = "Volume (Billion)"
+  )
+```
+
+```{r}
+ggseasonplot(
+  value_ts,
+  year.labels = TRUE
+) +
+  labs(
+    title = "Seasonal Pattern - Transaction Value",
+    y = "Value (₹ Trillion)"
+  )
+```
+
+### STL DECOMPOSITION
+
+```{r}
+volume_stl <- stl(
+  log(volume_ts),
+  s.window = "periodic"
+)
+
+autoplot(volume_stl) +
+  labs(
+    title = "STL Decomposition of Log Transaction Volume"
+  )
+```
+
+```{r}
+value_stl <- stl(
+  log(value_ts),
+  s.window = "periodic"
+)
+
+autoplot(value_stl) +
+  labs(
+    title = "STL Decomposition of Log Transaction Value"
+  )
+```
+
+## STRUCTURAL BREAK ANALYSIS
+
+### FOR VOLUME
+
+```{r}
+volume_break <- breakpoints(
+  log(Transaction_Volume_Billion) ~ Date,
+  data = upi
+)
+
+summary(volume_break)
+
+plot(volume_break)
+```
+
+### FOR VALUE
+
+```{r}
+value_break <- breakpoints(
+  log(Transaction_Value_INR_Trillion) ~ Date,
+  data = upi
+)
+
+summary(value_break)
+
+plot(value_break)
+```
+
+```{r}
+upi %>%
+  filter(
+    Date >= as.Date("2020-01-01"),
+    Date <= as.Date("2020-12-01")
+  ) %>%
+  select(
+    Date,
+    Transaction_Volume_Billion,
+    Transaction_Value_INR_Trillion,
+    Average_Transaction_Size
+  )
+```
+
+```{r}
+train_volume <- window(
+  volume_ts,
+  end = c(2024, 12)
+)
+
+test_volume <- window(
+  volume_ts,
+  start = c(2025, 1)
+)
+
+train_value <- window(
+  value_ts,
+  end = c(2024, 12)
+)
+
+test_value <- window(
+  value_ts,
+  start = c(2025, 1)
+)
+
+length(train_volume)
+length(test_volume)
+
+length(train_value)
+length(test_value)
+```
+
+## BENCHMARK MODEL
+
+```{r}
+## NAIVE 
+
+fc_volume_naive <- naive(
+  train_volume,
+  h = 12
+)
+
+fc_value_naive <- naive(
+  train_value,
+  h = 12
+)
+
+##DRIFT 
+fc_volume_drift <- rwf(
+  train_volume,
+  h = 12,
+  drift = TRUE
+)
+
+fc_value_drift <- rwf(
+  train_value,
+  h = 12,
+  drift = TRUE
+)
+
+## SEASONAL 
+fc_volume_snaive <- snaive(
+  train_volume,
+  h = 12
+)
+
+fc_value_snaive <- snaive(
+  train_value,
+  h = 12
+)
+```
+
+## LOG LINEAR TREND
+
+### VOLUME
+
+```{r}
+fc_volume_snaive <- snaive(
+  train_volume,
+  h = 12
+)
+
+fc_value_snaive <- snaive(
+  train_value,
+  h = 12
+)
+```
+
+### VALUE
+
+```{r}
+volume_log_model <- tslm(
+  log(train_volume) ~ trend
+)
+
+volume_log_fc <- forecast(
+  volume_log_model,
+  h = 12
+)
+
+volume_log_pred <- exp(
+  volume_log_fc$mean
+)
+```
+
+## ETS (M,M,M)
+
+### VOLUME
+
+```{r}
+volume_ets <- ets(
+  train_volume,
+  model = "MMM"
+)
+
+summary(volume_ets)
+
+volume_ets_fc <- forecast(
+  volume_ets,
+  h = 12,
+  level = c(80, 95)
+)
+```
+
+### VALUE
+
+```{r}
+value_ets <- ets(
+  train_value,
+  model = "MMM"
+)
+
+summary(value_ets)
+
+value_ets_fc <- forecast(
+  value_ets,
+  h = 12,
+  level = c(80, 95)
+)
+```
+
+### VOLUME ETS
+
+```{r}
+checkresiduals(volume_ets)
+```
+
+### VALUE ETS
+
+```{r}
+checkresiduals(value_ets)
+```
+
+## ACCURACY OF MODELS
+
+```{r}
+accuracy(
+  fc_volume_naive,
+  test_volume
+)
+
+accuracy(
+  fc_volume_naive,
+  test_volume
+)
+
+accuracy(
+  fc_volume_snaive,
+  test_volume
+)
+
+accuracy(
+  fc_volume_snaive,
+  test_volume
+)
+
+accuracy(fc_value_naive, test_value)
+accuracy(fc_value_drift, test_value)
+accuracy(fc_value_snaive, test_value)
+```
+
+## BUILDING ASSIGNMENT MODEL
+
+```{r}
+## VOLUME ACCURACY
+volume_accuracy <- rbind(
+  Naive = accuracy(fc_volume_naive, test_volume)[2, ],
+  Drift = accuracy(fc_volume_drift, test_volume)[2, ],
+  Seasonal_Naive = accuracy(fc_volume_snaive, test_volume)[2, ],
+  Log_Linear = accuracy(volume_log_fc, test_volume)[2, ],
+  ETS_MMM = accuracy(volume_ets_fc, test_volume)[2, ]
+)
+
+round(volume_accuracy, 3)
+
+## VALUE ACCURACY 
+volume_accuracy <- rbind(
+  Naive = accuracy(fc_volume_naive, test_volume)[2, ],
+  Drift = accuracy(fc_volume_drift, test_volume)[2, ],
+  Seasonal_Naive = accuracy(fc_volume_snaive, test_volume)[2, ],
+  Log_Linear = accuracy(volume_log_fc, test_volume)[2, ],
+  ETS_MMM = accuracy(volume_ets_fc, test_volume)[2, ]
+)
+
+round(volume_accuracy, 3)
+```
+
+## ACTUAL VS FORECAST VISUALISATION
+
+```{r}
+## VOLUME 
+autoplot(volume_ets_fc) +
+  autolayer(test_volume, series = "Actual") +
+  labs(
+    title = "UPI Transaction Volume: Actual vs Forecast",
+    x = "Year",
+    y = "Transactions (Billion)"
+  ) +
+  theme_minimal()
+
+## VALUE 
+autoplot(value_ets_fc) +
+  autolayer(test_value, series = "Actual") +
+  labs(
+    title = "UPI Transaction Value: Actual vs Forecast",
+    x = "Year",
+    y = "Transaction Value (₹ Trillion)"
+  ) +
+  theme_minimal()
+```
+
+## ++++++++++++++++++++++REFIT THE SELECTED MODEL USING HISTORICAL DATA
+
+```{r}
+final_volume_model <- ets(
+  volume_ts,
+  model = "MMM"
+)
+
+final_value_model <- ets(
+  value_ts,
+  model = "MMM"
+)
+
+## FORECAST 
+final_volume_fc <- forecast(
+  final_volume_model,
+  h = 12,
+  level = c(80, 95)
+)
+
+final_value_fc <- forecast(
+  final_value_model,
+  h = 12,
+  level = c(80, 95)
+)
+```
+
+## CREATING MANAGEMENT TABLE
+
+```{r}
+future_dates <- seq(
+  from = as.Date("2026-01-01"),
+  by = "month",
+  length.out = 12
+)
+
+management_table <- data.frame(
+  Month = future_dates,
+  
+  Forecast_Volume =
+    as.numeric(final_volume_fc$mean),
+  
+  Forecast_Value =
+    as.numeric(final_value_fc$mean),
+  
+  Volume_Lower_80 =
+    as.numeric(final_volume_fc$lower[, 1]),
+  
+  Volume_Upper_80 =
+    as.numeric(final_volume_fc$upper[, 1]),
+  
+  Volume_Lower_95 =
+    as.numeric(final_volume_fc$lower[, 2]),
+  
+  Volume_Upper_95 =
+    as.numeric(final_volume_fc$upper[, 2])
+) 
+```
+
+## CAPACITY RISK
+
+```{r}
+capacity <- 35
+
+## RISK CLASSIFICATION
+management_table <- management_table %>%
+  mutate(
+    Capacity_Utilisation =
+      Forecast_Volume / capacity * 100,
+    
+    Capacity_Risk = case_when(
+      
+      Forecast_Volume >= capacity ~
+        "Critical - Capacity Exceeded",
+      
+      Volume_Upper_80 >= capacity ~
+        "High - Material Capacity Risk",
+      
+      Forecast_Volume >= 0.90 * capacity ~
+        "Moderate - Approaching Capacity",
+      
+      TRUE ~
+        "Low"
+    )
+  )
+```
+
+## RECOMMENDATION COLUMN
+
+```{r}
+management_table <- management_table %>%
+  mutate(
+    Recommendation = case_when(
+      
+      Forecast_Volume >= capacity ~
+        "Additional processing capacity required",
+      
+      Volume_Upper_80 >= capacity ~
+        "Accelerate capacity expansion",
+      
+      Forecast_Volume >= 0.90 * capacity ~
+        "Prepare expansion and monitor utilisation",
+      
+      TRUE ~
+        "Existing capacity sufficient"
+    )
+  )
+
+management_table
+```
+
+## FINAL MANAGEMENT OUTPUT
+
+```{r}
+management_table <- management_table %>%
+  mutate(
+    Recommendation = case_when(
+      
+      Forecast_Volume >= capacity ~
+        "Additional processing capacity required",
+      
+      Volume_Upper_80 >= capacity ~
+        "Accelerate capacity expansion",
+      
+      Forecast_Volume >= 0.90 * capacity ~
+        "Prepare expansion and monitor utilisation",
+      
+      TRUE ~
+        "Existing capacity sufficient"
+    )
+  )
+
+
+management_table
+```
+
+Based on the current dataset and the out-of-sample model comparison:
+
+> **UPI transaction volume demonstrates a strong multiplicative growth pattern rather than linear growth. ETS(M,M,M) provides the most reliable forecasting performance among the tested approaches, substantially outperforming naïve, drift, linear-trend and log-linear alternatives on the 12-month holdout period.**
+>
+> **The selected model forecasts transaction volume rising from approximately 28.1 billion transactions in January 2026 to 43.6 billion in December 2026. The company's current capacity of 35 billion transactions per month is therefore expected to be reached around June 2026.**
+>
+> **Management should not wait until the capacity threshold is actually exceeded. Expansion planning should begin before the forecast reaches 90–100% utilisation, with additional processing capacity targeted to be operational by approximately May 2026. The prediction intervals should be used as the final risk trigger because they quantify the possibility of exceeding capacity earlier than the point forecast.**
